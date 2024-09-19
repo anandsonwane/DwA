@@ -1,0 +1,211 @@
+// pom.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.6.3</version>
+        <relativePath/>
+    </parent>
+    <groupId>com.example</groupId>
+    <artifactId>digital-wallet</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>digital-wallet</name>
+    <description>Basic Digital Wallet Application</description>
+    <properties>
+        <java.version>11</java.version>
+    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+
+// src/main/java/com/example/digitalwallet/DigitalWalletApplication.java
+package com.example.digitalwallet;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class DigitalWalletApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(DigitalWalletApplication.class, args);
+    }
+}
+
+// src/main/java/com/example/digitalwallet/model/Wallet.java
+package com.example.digitalwallet.model;
+
+import lombok.Data;
+import javax.persistence.*;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotNull;
+import java.math.BigDecimal;
+
+@Data
+@Entity
+@Table(name = "wallets")
+public class Wallet {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @NotBlank
+    private String name;
+
+    @NotNull
+    private BigDecimal balance;
+}
+
+// src/main/java/com/example/digitalwallet/repository/WalletRepository.java
+package com.example.digitalwallet.repository;
+
+import com.example.digitalwallet.model.Wallet;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface WalletRepository extends JpaRepository<Wallet, Long> {
+}
+
+// src/main/java/com/example/digitalwallet/service/WalletService.java
+package com.example.digitalwallet.service;
+
+import com.example.digitalwallet.model.Wallet;
+import com.example.digitalwallet.repository.WalletRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+@Service
+public class WalletService {
+
+    @Autowired
+    private WalletRepository walletRepository;
+
+    public Wallet createWallet(String name) {
+        Wallet wallet = new Wallet();
+        wallet.setName(name);
+        wallet.setBalance(BigDecimal.ZERO);
+        return walletRepository.save(wallet);
+    }
+
+    public List<Wallet> getAllWallets() {
+        return walletRepository.findAll();
+    }
+
+    public Wallet getWallet(Long id) {
+        return walletRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Wallet not found"));
+    }
+
+    public Wallet deposit(Long id, BigDecimal amount) {
+        Wallet wallet = getWallet(id);
+        wallet.setBalance(wallet.getBalance().add(amount));
+        return walletRepository.save(wallet);
+    }
+
+    public Wallet withdraw(Long id, BigDecimal amount) {
+        Wallet wallet = getWallet(id);
+        if (wallet.getBalance().compareTo(amount) < 0) {
+            throw new RuntimeException("Insufficient funds");
+        }
+        wallet.setBalance(wallet.getBalance().subtract(amount));
+        return walletRepository.save(wallet);
+    }
+}
+
+// src/main/java/com/example/digitalwallet/controller/WalletController.java
+package com.example.digitalwallet.controller;
+
+import com.example.digitalwallet.model.Wallet;
+import com.example.digitalwallet.service.WalletService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/wallets")
+public class WalletController {
+
+    @Autowired
+    private WalletService walletService;
+
+    @PostMapping
+    public ResponseEntity<Wallet> createWallet(@RequestParam String name) {
+        Wallet wallet = walletService.createWallet(name);
+        return ResponseEntity.ok(wallet);
+    }
+
+    @GetMapping
+    public ResponseEntity<List<Wallet>> getAllWallets() {
+        List<Wallet> wallets = walletService.getAllWallets();
+        return ResponseEntity.ok(wallets);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Wallet> getWallet(@PathVariable Long id) {
+        Wallet wallet = walletService.getWallet(id);
+        return ResponseEntity.ok(wallet);
+    }
+
+    @PostMapping("/{id}/deposit")
+    public ResponseEntity<Wallet> deposit(@PathVariable Long id, @RequestParam BigDecimal amount) {
+        Wallet wallet = walletService.deposit(id, amount);
+        return ResponseEntity.ok(wallet);
+    }
+
+    @PostMapping("/{id}/withdraw")
+    public ResponseEntity<Wallet> withdraw(@PathVariable Long id, @RequestParam BigDecimal amount) {
+        try {
+            Wallet wallet = walletService.withdraw(id, amount);
+            return ResponseEntity.ok(wallet);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(null);
+        }
+    }
+}
+
+// src/main/resources/application.properties
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.driverClassName=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=
+spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+spring.h2.console.enabled=true
