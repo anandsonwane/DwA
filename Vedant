@@ -1,0 +1,305 @@
+# Inventory Management System Design
+
+## System Architecture
+
+```
+[Frontend (Angular)] <-> [Backend (Spring Boot)] <-> [Database (PostgreSQL)]
+```
+
+## Backend (Spring Boot)
+
+### Project Structure
+```
+src/
+├── main/
+│   ├── java/
+│   │   └── com/
+│   │       └── inventorymanagement/
+│   │           ├── controller/
+│   │           ├── model/
+│   │           ├── repository/
+│   │           ├── service/
+│   │           └── InventoryManagementApplication.java
+│   └── resources/
+│       └── application.properties
+└── test/
+    └── java/
+        └── com/
+            └── inventorymanagement/
+                └── (test classes)
+```
+
+### Key Components
+
+1. Models:
+   - Product
+   - Inventory
+   - PurchaseOrder
+   - SalesOrder
+   - Supplier
+   - Customer
+
+2. Repositories:
+   - ProductRepository
+   - InventoryRepository
+   - PurchaseOrderRepository
+   - SalesOrderRepository
+   - SupplierRepository
+   - CustomerRepository
+
+3. Services:
+   - ProductService
+   - InventoryService
+   - PurchaseOrderService
+   - SalesOrderService
+   - SupplierService
+   - CustomerService
+   - ReportingService
+
+4. Controllers:
+   - ProductController
+   - InventoryController
+   - PurchaseOrderController
+   - SalesOrderController
+   - SupplierController
+   - CustomerController
+   - ReportingController
+
+### Sample Model: Product
+
+```java
+@Entity
+@Table(name = "products")
+public class Product {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String name;
+
+    @Column(nullable = false)
+    private String sku;
+
+    private String description;
+
+    @Column(nullable = false)
+    private BigDecimal price;
+
+    // Getters, setters, constructors
+}
+```
+
+### Sample Repository: ProductRepository
+
+```java
+@Repository
+public interface ProductRepository extends JpaRepository<Product, Long> {
+    List<Product> findByNameContaining(String name);
+    Optional<Product> findBySku(String sku);
+}
+```
+
+### Sample Service: ProductService
+
+```java
+@Service
+public class ProductService {
+    @Autowired
+    private ProductRepository productRepository;
+
+    public List<Product> getAllProducts() {
+        return productRepository.findAll();
+    }
+
+    public Product getProductById(Long id) {
+        return productRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+    }
+
+    public Product createProduct(Product product) {
+        return productRepository.save(product);
+    }
+
+    // Other methods: updateProduct, deleteProduct, etc.
+}
+```
+
+### Sample Controller: ProductController
+
+```java
+@RestController
+@RequestMapping("/api/products")
+public class ProductController {
+    @Autowired
+    private ProductService productService;
+
+    @GetMapping
+    public List<Product> getAllProducts() {
+        return productService.getAllProducts();
+    }
+
+    @GetMapping("/{id}")
+    public Product getProductById(@PathVariable Long id) {
+        return productService.getProductById(id);
+    }
+
+    @PostMapping
+    public Product createProduct(@RequestBody Product product) {
+        return productService.createProduct(product);
+    }
+
+    // Other endpoints: updateProduct, deleteProduct, etc.
+}
+```
+
+## Frontend (Angular)
+
+### Project Structure
+```
+src/
+├── app/
+│   ├── components/
+│   ├── models/
+│   ├── services/
+│   ├── app-routing.module.ts
+│   └── app.module.ts
+├── assets/
+└── environments/
+```
+
+### Key Components
+
+1. Models:
+   - product.model.ts
+   - inventory.model.ts
+   - purchase-order.model.ts
+   - sales-order.model.ts
+   - supplier.model.ts
+   - customer.model.ts
+
+2. Services:
+   - product.service.ts
+   - inventory.service.ts
+   - purchase-order.service.ts
+   - sales-order.service.ts
+   - supplier.service.ts
+   - customer.service.ts
+   - reporting.service.ts
+
+3. Components:
+   - product-list
+   - product-detail
+   - inventory-management
+   - purchase-order-management
+   - sales-order-management
+   - supplier-management
+   - customer-management
+   - dashboard
+   - reporting
+
+### Sample Model: product.model.ts
+
+```typescript
+export interface Product {
+    id?: number;
+    name: string;
+    sku: string;
+    description?: string;
+    price: number;
+}
+```
+
+### Sample Service: product.service.ts
+
+```typescript
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { Product } from '../models/product.model';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class ProductService {
+  private apiUrl = 'http://localhost:8080/api/products';
+
+  constructor(private http: HttpClient) { }
+
+  getAllProducts(): Observable<Product[]> {
+    return this.http.get<Product[]>(this.apiUrl);
+  }
+
+  getProductById(id: number): Observable<Product> {
+    return this.http.get<Product>(`${this.apiUrl}/${id}`);
+  }
+
+  createProduct(product: Product): Observable<Product> {
+    return this.http.post<Product>(this.apiUrl, product);
+  }
+
+  // Other methods: updateProduct, deleteProduct, etc.
+}
+```
+
+### Sample Component: product-list.component.ts
+
+```typescript
+import { Component, OnInit } from '@angular/core';
+import { Product } from '../../models/product.model';
+import { ProductService } from '../../services/product.service';
+
+@Component({
+  selector: 'app-product-list',
+  templateUrl: './product-list.component.html',
+  styleUrls: ['./product-list.component.css']
+})
+export class ProductListComponent implements OnInit {
+  products: Product[] = [];
+
+  constructor(private productService: ProductService) { }
+
+  ngOnInit(): void {
+    this.loadProducts();
+  }
+
+  loadProducts(): void {
+    this.productService.getAllProducts().subscribe(
+      (data: Product[]) => {
+        this.products = data;
+      },
+      (error) => {
+        console.error('Error fetching products:', error);
+      }
+    );
+  }
+}
+```
+
+## Database (PostgreSQL)
+
+### Tables
+1. products
+2. inventory
+3. purchase_orders
+4. sales_orders
+5. suppliers
+6. customers
+
+### Sample Table: products
+
+```sql
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    sku VARCHAR(50) NOT NULL UNIQUE,
+    description TEXT,
+    price DECIMAL(10, 2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_products_sku ON products(sku);
+```
+
+This design provides a solid foundation for building an Inventory Management System using Spring Boot, PostgreSQL, and Angular. You can expand on this structure by adding more features, implementing security measures, and enhancing the user interface as needed.
