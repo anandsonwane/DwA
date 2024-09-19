@@ -1,0 +1,540 @@
+backend
+// pom.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.6.3</version>
+        <relativePath/>
+    </parent>
+    <groupId>com.example</groupId>
+    <artifactId>digital-wallet</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>digital-wallet</name>
+    <description>Basic Digital Wallet Application</description>
+    <properties>
+        <java.version>11</java.version>
+    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+</project>
+
+// src/main/java/com/example/digitalwallet/DigitalWalletApplication.java
+package com.example.digitalwallet;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class DigitalWalletApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(DigitalWalletApplication.class, args);
+    }
+}
+
+// src/main/java/com/example/digitalwallet/model/User.java
+package com.example.digitalwallet.model;
+
+import lombok.Data;
+import javax.persistence.*;
+import javax.validation.constraints.Email;
+import javax.validation.constraints.NotBlank;
+import java.util.ArrayList;
+import java.util.List;
+
+@Data
+@Entity
+@Table(name = "users")
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @NotBlank
+    @Column(unique = true)
+    private String username;
+
+    @NotBlank
+    @Email
+    @Column(unique = true)
+    private String email;
+
+    @NotBlank
+    private String password;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<Wallet> wallets = new ArrayList<>();
+}
+
+// src/main/java/com/example/digitalwallet/model/Wallet.java
+package com.example.digitalwallet.model;
+
+import lombok.Data;
+import javax.persistence.*;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotNull;
+import java.math.BigDecimal;
+
+@Data
+@Entity
+@Table(name = "wallets")
+public class Wallet {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @NotBlank
+    private String name;
+
+    @NotNull
+    private BigDecimal balance;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+}
+
+// src/main/java/com/example/digitalwallet/repository/UserRepository.java
+package com.example.digitalwallet.repository;
+
+import com.example.digitalwallet.model.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.Optional;
+
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByUsername(String username);
+    Boolean existsByUsername(String username);
+    Boolean existsByEmail(String email);
+}
+
+// src/main/java/com/example/digitalwallet/repository/WalletRepository.java
+package com.example.digitalwallet.repository;
+
+import com.example.digitalwallet.model.Wallet;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface WalletRepository extends JpaRepository<Wallet, Long> {
+    List<Wallet> findByUserId(Long userId);
+}
+
+// src/main/java/com/example/digitalwallet/security/WebSecurityConfig.java
+package com.example.digitalwallet.security;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+@Configuration
+@EnableWebSecurity
+public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.csrf().disable()
+            .authorizeRequests()
+            .antMatchers("/api/auth/**").permitAll()
+            .anyRequest().authenticated()
+            .and()
+            .httpBasic();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+}
+
+// src/main/java/com/example/digitalwallet/service/UserService.java
+package com.example.digitalwallet.service;
+
+import com.example.digitalwallet.model.User;
+import com.example.digitalwallet.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+@Service
+public class UserService {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    public User registerUser(User user) {
+        if (userRepository.existsByUsername(user.getUsername())) {
+            throw new RuntimeException("Username is already taken");
+        }
+        if (userRepository.existsByEmail(user.getEmail())) {
+            throw new RuntimeException("Email is already in use");
+        }
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        return userRepository.save(user);
+    }
+}
+
+// src/main/java/com/example/digitalwallet/service/WalletService.java
+package com.example.digitalwallet.service;
+
+import com.example.digitalwallet.model.User;
+import com.example.digitalwallet.model.Wallet;
+import com.example.digitalwallet.repository.UserRepository;
+import com.example.digitalwallet.repository.WalletRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+@Service
+public class WalletService {
+
+    @Autowired
+    private WalletRepository walletRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    public Wallet createWallet(Long userId, String name) {
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        Wallet wallet = new Wallet();
+        wallet.setName(name);
+        wallet.setBalance(BigDecimal.ZERO);
+        wallet.setUser(user);
+        
+        return walletRepository.save(wallet);
+    }
+
+    public List<Wallet> getUserWallets(Long userId) {
+        return walletRepository.findByUserId(userId);
+    }
+
+    public Wallet deposit(Long walletId, BigDecimal amount) {
+        Wallet wallet = walletRepository.findById(walletId)
+            .orElseThrow(() -> new RuntimeException("Wallet not found"));
+        wallet.setBalance(wallet.getBalance().add(amount));
+        return walletRepository.save(wallet);
+    }
+
+    public Wallet withdraw(Long walletId, BigDecimal amount) {
+        Wallet wallet = walletRepository.findById(walletId)
+            .orElseThrow(() -> new RuntimeException("Wallet not found"));
+        if (wallet.getBalance().compareTo(amount) < 0) {
+            throw new RuntimeException("Insufficient funds");
+        }
+        wallet.setBalance(wallet.getBalance().subtract(amount));
+        return walletRepository.save(wallet);
+    }
+}
+
+// src/main/java/com/example/digitalwallet/controller/AuthController.java
+package com.example.digitalwallet.controller;
+
+import com.example.digitalwallet.model.User;
+import com.example.digitalwallet.service.UserService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+
+    @Autowired
+    private UserService userService;
+
+    @PostMapping("/register")
+    public ResponseEntity<?> registerUser(@RequestBody User user) {
+        try {
+            User registeredUser = userService.registerUser(user);
+            return ResponseEntity.ok("User registered successfully");
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+}
+
+// src/main/java/com/example/digitalwallet/controller/WalletController.java
+package com.example.digitalwallet.controller;
+
+import com.example.digitalwallet.model.Wallet;
+import com.example.digitalwallet.service.WalletService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/wallets")
+public class WalletController {
+
+    @Autowired
+    private WalletService walletService;
+
+    @PostMapping
+    public ResponseEntity<Wallet> createWallet(@RequestParam Long userId, @RequestParam String name) {
+        Wallet wallet = walletService.createWallet(userId, name);
+        return ResponseEntity.ok(wallet);
+    }
+
+    @GetMapping
+    public ResponseEntity<List<Wallet>> getUserWallets(@RequestParam Long userId) {
+        List<Wallet> wallets = walletService.getUserWallets(userId);
+        return ResponseEntity.ok(wallets);
+    }
+
+    @PostMapping("/{walletId}/deposit")
+    public ResponseEntity<Wallet> deposit(@PathVariable Long walletId, @RequestParam BigDecimal amount) {
+        Wallet wallet = walletService.deposit(walletId, amount);
+        return ResponseEntity.ok(wallet);
+    }
+
+    @PostMapping("/{walletId}/withdraw")
+    public ResponseEntity<Wallet> withdraw(@PathVariable Long walletId, @RequestParam BigDecimal amount) {
+        try {
+            Wallet wallet = walletService.withdraw(walletId, amount);
+            return ResponseEntity.ok(wallet);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(null);
+        }
+    }
+}
+
+// src/main/resources/application.properties
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.driverClassName=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=
+spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+spring.h2.console.enabled=true
+
+
+
+frontend 
+
+
+// src/app/app.module.ts
+import { BrowserModule } from '@angular/platform-browser';
+import { NgModule } from '@angular/core';
+import { HttpClientModule } from '@angular/common/http';
+import { ReactiveFormsModule } from '@angular/forms';
+import { AppRoutingModule } from './app-routing.module';
+import { AppComponent } from './app.component';
+import { LoginComponent } from './components/login/login.component';
+import { RegisterComponent } from './components/register/register.component';
+import { DashboardComponent } from './components/dashboard/dashboard.component';
+import { WalletComponent } from './components/wallet/wallet.component';
+
+@NgModule({
+  declarations: [
+    AppComponent,
+    LoginComponent,
+    RegisterComponent,
+    DashboardComponent,
+    WalletComponent
+  ],
+  imports: [
+    BrowserModule,
+    AppRoutingModule,
+    HttpClientModule,
+    ReactiveFormsModule
+  ],
+  providers: [],
+  bootstrap: [AppComponent]
+})
+export class AppModule { }
+
+// src/app/app-routing.module.ts
+import { NgModule } from '@angular/core';
+import { Routes, RouterModule } from '@angular/router';
+import { LoginComponent } from './components/login/login.component';
+import { RegisterComponent } from './components/register/register.component';
+import { DashboardComponent } from './components/dashboard/dashboard.component';
+import { AuthGuard } from './guards/auth.guard';
+
+const routes: Routes = [
+  { path: 'login', component: LoginComponent },
+  { path: 'register', component: RegisterComponent },
+  { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuard] },
+  { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
+];
+
+@NgModule({
+  imports: [RouterModule.forRoot(routes)],
+  exports: [RouterModule]
+})
+export class AppRoutingModule { }
+
+// src/app/services/auth.service.ts
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class AuthService {
+  private apiUrl = 'http://localhost:8080/api/auth';
+
+  constructor(private http: HttpClient) { }
+
+  login(username: string, password: string): Observable<boolean> {
+    return this.http.post<{ token: string }>(`${this.apiUrl}/signin`, { username, password })
+      .pipe(
+        map(result => {
+          localStorage.setItem('token', result.token);
+          return true;
+        })
+      );
+  }
+
+  register(username: string, email: string, password: string): Observable<boolean> {
+    return this.http.post<any>(`${this.apiUrl}/signup`, { username, email, password })
+      .pipe(
+        map(() => true)
+      );
+  }
+
+  logout() {
+    localStorage.removeItem('token');
+  }
+
+  isLoggedIn() {
+    return localStorage.getItem('token') !== null;
+  }
+}
+
+// src/app/services/wallet.service.ts
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class WalletService {
+  private apiUrl = 'http://localhost:8080/api/wallets';
+
+  constructor(private http: HttpClient) { }
+
+  getUserWallets(userId: number): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}?userId=${userId}`);
+  }
+
+  createWallet(wallet: any): Observable<any> {
+    return this.http.post<any>(this.apiUrl, wallet);
+  }
+}
+
+// src/app/components/login/login.component.ts
+import { Component } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
+import { AuthService } from '../../services/auth.service';
+
+@Component({
+  selector: 'app-login',
+  templateUrl: './login.component.html',
+  styleUrls: ['./login.component.css']
+})
+export class LoginComponent {
+  loginForm: FormGroup;
+
+  constructor(
+    private formBuilder: FormBuilder,
+    private authService: AuthService,
+    private router: Router
+  ) {
+    this.loginForm = this.formBuilder.group({
+      username: ['', Validators.required],
+      password: ['', Validators.required]
+    });
+  }
+
+  onSubmit() {
+    if (this.loginForm.valid) {
+      this.authService.login(
+        this.loginForm.get('username')?.value,
+        this.loginForm.get('password')?.value
+      ).subscribe(
+        success => {
+          if (success) {
+            this.router.navigate(['/dashboard']);
+          }
+        },
+        error => {
+          console.error('Login failed', error);
+        }
+      );
+    }
+  }
+}
+
+// src/app/components/dashboard/dashboard.component.ts
+import { Component, OnInit } from '@angular/core';
+import { WalletService } from '../../services/wallet.service';
+
+@Component({
+  selector: 'app-dashboard',
+  templateUrl: './dashboard.component.html',
+  styleUrls: ['./dashboard.component.css']
+})
+export class DashboardComponent implements OnInit {
+  wallets: any[] = [];
+
+  constructor(private walletService: WalletService) { }
+
+  ngOnInit() {
+    // In a real application, you would get the user ID from the authenticated user
+    const userId = 1;
+    this.walletService.getUserWallets(userId).subscribe(
+      wallets => {
+        this.wallets = wallets;
+      },
+      error => {
+        console.error('Error fetching wallets', error);
+      }
+    );
+  }
+}
