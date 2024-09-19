@@ -1,0 +1,81 @@
+# Spring Boot Digital Wallet Project Hierarchy
+
+```
+digital-wallet/
+│
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── com/
+│   │   │       └── example/
+│   │   │           └── digitalwallet/
+│   │   │               ├── DigitalWalletApplication.java
+│   │   │               │
+│   │   │               ├── model/
+│   │   │               │   ├── User.java
+│   │   │               │   └── Wallet.java
+│   │   │               │
+│   │   │               ├── repository/
+│   │   │               │   ├── UserRepository.java
+│   │   │               │   └── WalletRepository.java
+│   │   │               │
+│   │   │               ├── service/
+│   │   │               │   ├── UserService.java
+│   │   │               │   └── WalletService.java
+│   │   │               │
+│   │   │               ├── controller/
+│   │   │               │   ├── AuthController.java
+│   │   │               │   └── WalletController.java
+│   │   │               │
+│   │   │               └── security/
+│   │   │                   └── WebSecurityConfig.java
+│   │   │
+│   │   └── resources/
+│   │       └── application.properties
+│   │
+│   └── test/
+│       └── java/
+│           └── com/
+│               └── example/
+│                   └── digitalwallet/
+│                       └── (test files go here)
+│
+├── pom.xml
+│
+└── README.md
+```
+
+## Explanation of the hierarchy:
+
+1. `src/main/java/`: This is where all the Java source code resides.
+
+2. `com/example/digitalwallet/`: This is the base package for your application.
+
+3. `DigitalWalletApplication.java`: The main class that runs the Spring Boot application.
+
+4. `model/`: Contains the entity classes (User and Wallet).
+
+5. `repository/`: Contains the Spring Data JPA repositories.
+
+6. `service/`: Contains the service classes that implement the business logic.
+
+7. `controller/`: Contains the REST controllers that handle HTTP requests.
+
+8. `security/`: Contains security-related configurations.
+
+9. `src/main/resources/`: Contains non-Java resources, including the `application.properties` file.
+
+10. `src/test/`: This is where your test classes would go.
+
+11. `pom.xml`: The Maven configuration file that manages dependencies and build settings.
+
+To create this structure:
+
+1. Create the main folders: `src/main/java`, `src/main/resources`, and `src/test/java`.
+2. Inside `src/main/java`, create the package structure: `com/example/digitalwallet`.
+3. Create the subpackages: `model`, `repository`, `service`, `controller`, and `security`.
+4. Place each Java file in its corresponding package.
+5. Put `application.properties` in the `src/main/resources` folder.
+6. Place `pom.xml` in the root directory of the project.
+
+This structure follows Spring Boot conventions and separates concerns, making the project organized and easy to navigate.
