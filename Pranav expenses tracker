@@ -1,0 +1,463 @@
+hierarchy 
+# Expenses Tracker Application Hierarchy
+
+## Backend (Spring Boot)
+
+```
+src/main/java/com/example/expensestracker/
+│
+├── model/
+│   ├── User.java
+│   └── Expense.java
+│
+├── repository/
+│   ├── UserRepository.java
+│   └── ExpenseRepository.java
+│
+├── service/
+│   └── UserService.java
+│
+├── security/
+│   └── JwtUtil.java
+│
+├── controller/
+│   ├── AuthController.java
+│   └── ExpenseController.java
+│
+└── ExpensesTrackerApplication.java (main class)
+
+src/main/resources/
+└── application.properties (database and other configurations)
+
+pom.xml (project dependencies)
+```
+
+## Frontend (Angular)
+
+```
+src/
+├── app/
+│   ├── components/
+│   │   ├── login/
+│   │   │   └── login.component.ts
+│   │   ├── register/
+│   │   │   └── register.component.ts
+│   │   ├── expense-list/
+│   │   │   └── expense-list.component.ts
+│   │   └── add-expense/
+│   │       └── add-expense.component.ts
+│   │
+│   ├── services/
+│   │   ├── auth.service.ts
+│   │   └── expense.service.ts
+│   │
+│   ├── guards/
+│   │   └── auth.guard.ts
+│   │
+│   ├── interceptors/
+│   │   └── auth.interceptor.ts
+│   │
+│   ├── app-routing.module.ts
+│   ├── app.module.ts
+│   └── app.component.ts
+│
+├── assets/
+│
+└── index.html
+
+package.json (project dependencies)
+angular.json (Angular CLI configuration)
+```
+
+
+
+
+backend 
+
+
+// pom.xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt</artifactId>
+        <version>0.9.1</version>
+    </dependency>
+    <dependency>
+        <groupId>com.h2database</groupId>
+        <artifactId>h2</artifactId>
+        <scope>runtime</scope>
+    </dependency>
+</dependencies>
+
+// User.java
+@Entity
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String username;
+    private String password;
+    // getters and setters
+}
+
+// Expense.java
+@Entity
+public class Expense {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String description;
+    private BigDecimal amount;
+    private LocalDate date;
+    @ManyToOne
+    private User user;
+    // getters and setters
+}
+
+// UserRepository.java
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByUsername(String username);
+}
+
+// ExpenseRepository.java
+@Repository
+public interface ExpenseRepository extends JpaRepository<Expense, Long> {
+    List<Expense> findByUser(User user);
+}
+
+// UserService.java
+@Service
+public class UserService implements UserDetailsService {
+    @Autowired
+    private UserRepository userRepository;
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userRepository.findByUsername(username)
+            .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        return new org.springframework.security.core.userdetails.User(user.getUsername(), user.getPassword(), new ArrayList<>());
+    }
+}
+
+// JwtUtil.java
+@Component
+public class JwtUtil {
+    private String SECRET_KEY = "your_secret_key";
+
+    public String extractUsername(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
+
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
+
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+
+    private Claims extractAllClaims(String token) {
+        return Jwts.parser().setSigningKey(SECRET_KEY).parseClaimsJws(token).getBody();
+    }
+
+    private Boolean isTokenExpired(String token) {
+        return extractExpiration(token).before(new Date());
+    }
+
+    public String generateToken(UserDetails userDetails) {
+        Map<String, Object> claims = new HashMap<>();
+        return createToken(claims, userDetails.getUsername());
+    }
+
+    private String createToken(Map<String, Object> claims, String subject) {
+        return Jwts.builder().setClaims(claims).setSubject(subject).setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 10))
+                .signWith(SignatureAlgorithm.HS256, SECRET_KEY).compact();
+    }
+
+    public Boolean validateToken(String token, UserDetails userDetails) {
+        final String username = extractUsername(token);
+        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+    }
+}
+
+// AuthController.java
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+    @Autowired
+    private AuthenticationManager authenticationManager;
+    @Autowired
+    private UserService userService;
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) throws Exception {
+        try {
+            authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword())
+            );
+        } catch (BadCredentialsException e) {
+            throw new Exception("Incorrect username or password", e);
+        }
+        final UserDetails userDetails = userService.loadUserByUsername(loginRequest.getUsername());
+        final String jwt = jwtUtil.generateToken(userDetails);
+        return ResponseEntity.ok(new AuthenticationResponse(jwt));
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<?> register(@RequestBody User user) {
+        // Implement user registration logic
+    }
+}
+
+// ExpenseController.java
+@RestController
+@RequestMapping("/api/expenses")
+public class ExpenseController {
+    @Autowired
+    private ExpenseRepository expenseRepository;
+
+    @GetMapping
+    public List<Expense> getAllExpenses(Principal principal) {
+        User user = // Get user from principal
+        return expenseRepository.findByUser(user);
+    }
+
+    @PostMapping
+    public Expense addExpense(@RequestBody Expense expense, Principal principal) {
+        User user = // Get user from principal
+        expense.setUser(user);
+        return expenseRepository.save(expense);
+    }
+
+    // Implement other CRUD operations
+}
+
+
+
+
+frontend
+
+
+// app.module.ts
+import { NgModule } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
+import { AppRoutingModule } from './app-routing.module';
+import { AppComponent } from './app.component';
+import { LoginComponent } from './login/login.component';
+import { RegisterComponent } from './register/register.component';
+import { ExpenseListComponent } from './expense-list/expense-list.component';
+import { AddExpenseComponent } from './add-expense/add-expense.component';
+import { AuthInterceptor } from './auth.interceptor';
+
+@NgModule({
+  declarations: [
+    AppComponent,
+    LoginComponent,
+    RegisterComponent,
+    ExpenseListComponent,
+    AddExpenseComponent
+  ],
+  imports: [
+    BrowserModule,
+    AppRoutingModule,
+    FormsModule,
+    ReactiveFormsModule,
+    HttpClientModule
+  ],
+  providers: [
+    { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true }
+  ],
+  bootstrap: [AppComponent]
+})
+export class AppModule { }
+
+// app-routing.module.ts
+import { NgModule } from '@angular/core';
+import { RouterModule, Routes } from '@angular/router';
+import { LoginComponent } from './login/login.component';
+import { RegisterComponent } from './register/register.component';
+import { ExpenseListComponent } from './expense-list/expense-list.component';
+import { AddExpenseComponent } from './add-expense/add-expense.component';
+import { AuthGuard } from './auth.guard';
+
+const routes: Routes = [
+  { path: 'login', component: LoginComponent },
+  { path: 'register', component: RegisterComponent },
+  { path: 'expenses', component: ExpenseListComponent, canActivate: [AuthGuard] },
+  { path: 'add-expense', component: AddExpenseComponent, canActivate: [AuthGuard] },
+  { path: '', redirectTo: '/expenses', pathMatch: 'full' }
+];
+
+@NgModule({
+  imports: [RouterModule.forRoot(routes)],
+  exports: [RouterModule]
+})
+export class AppRoutingModule { }
+
+// auth.service.ts
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { tap } from 'rxjs/operators';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class AuthService {
+  private apiUrl = 'http://localhost:8080/api/auth';
+
+  constructor(private http: HttpClient) { }
+
+  login(username: string, password: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/login`, { username, password })
+      .pipe(
+        tap(response => this.setSession(response))
+      );
+  }
+
+  register(username: string, password: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/register`, { username, password });
+  }
+
+  private setSession(authResult: any) {
+    localStorage.setItem('id_token', authResult.token);
+  }
+
+  logout() {
+    localStorage.removeItem('id_token');
+  }
+
+  isLoggedIn() {
+    return !!localStorage.getItem('id_token');
+  }
+}
+
+// expense.service.ts
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class ExpenseService {
+  private apiUrl = 'http://localhost:8080/api/expenses';
+
+  constructor(private http: HttpClient) { }
+
+  getExpenses(): Observable<any[]> {
+    return this.http.get<any[]>(this.apiUrl);
+  }
+
+  addExpense(expense: any): Observable<any> {
+    return this.http.post<any>(this.apiUrl, expense);
+  }
+
+  // Implement other CRUD operations
+}
+
+// login.component.ts
+import { Component } from '@angular/core';
+import { AuthService } from '../auth.service';
+import { Router } from '@angular/router';
+
+@Component({
+  selector: 'app-login',
+  template: `
+    <form (ngSubmit)="onSubmit()">
+      <input [(ngModel)]="username" name="username" placeholder="Username" required>
+      <input [(ngModel)]="password" name="password" type="password" placeholder="Password" required>
+      <button type="submit">Login</button>
+    </form>
+  `
+})
+export class LoginComponent {
+  username: string = '';
+  password: string = '';
+
+  constructor(private authService: AuthService, private router: Router) { }
+
+  onSubmit() {
+    this.authService.login(this.username, this.password).subscribe(
+      () => this.router.navigate(['/expenses']),
+      error => console.error('Login failed', error)
+    );
+  }
+}
+
+// expense-list.component.ts
+import { Component, OnInit } from '@angular/core';
+import { ExpenseService } from '../expense.service';
+
+@Component({
+  selector: 'app-expense-list',
+  template: `
+    <h2>Expenses</h2>
+    <ul>
+      <li *ngFor="let expense of expenses">
+        {{ expense.description }} - {{ expense.amount | currency }}
+      </li>
+    </ul>
+    <a routerLink="/add-expense">Add Expense</a>
+  `
+})
+export class ExpenseListComponent implements OnInit {
+  expenses: any[] = [];
+
+  constructor(private expenseService: ExpenseService) { }
+
+  ngOnInit() {
+    this.expenseService.getExpenses().subscribe(
+      expenses => this.expenses = expenses,
+      error => console.error('Failed to load expenses', error)
+    );
+  }
+}
+
+// add-expense.component.ts
+import { Component } from '@angular/core';
+import { ExpenseService } from '../expense.service';
+import { Router } from '@angular/router';
+
+@Component({
+  selector: 'app-add-expense',
+  template: `
+    <form (ngSubmit)="onSubmit()">
+      <input [(ngModel)]="expense.description" name="description" placeholder="Description" required>
+      <input [(ngModel)]="expense.amount" name="amount" type="number" placeholder="Amount" required>
+      <input [(ngModel)]="expense.date" name="date" type="date" required>
+      <button type="submit">Add Expense</button>
+    </form>
+  `
+})
+export class AddExpenseComponent {
+  expense: any = {};
+
+  constructor(private expenseService: ExpenseService, private router: Router) { }
+
+  onSubmit() {
+    this.expenseService.addExpense(this.expense).subscribe(
+      () => this.router.navigate(['/expenses']),
+      error => console.error('Failed to add expense', error)
+    );
+  }
+}
